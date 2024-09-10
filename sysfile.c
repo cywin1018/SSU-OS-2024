@@ -442,3 +442,31 @@ sys_pipe(void)
   fd[1] = fd1;
   return 0;
 }
+
+int
+sys_lseek(void)
+{
+  int fd,offset,whence;
+  struct file*f;
+
+   if (argint(0, &fd) < 0 || argint(1, &offset) < 0 || argint(2, &whence) < 0)
+    return -1;
+
+  if ((f = myproc()->ofile[fd]) == 0)
+    return -1;
+
+  switch (whence) {
+  case 0: 
+    f->off = offset;
+    break;
+  case 1:
+    f->off += offset;
+    break;
+  case 2: 
+    f->off = f->ip->size + offset;
+    break;
+  default:
+    return -1;
+  }
+  return f->off;  
+}
