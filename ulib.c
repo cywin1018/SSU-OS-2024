@@ -80,17 +80,31 @@ stat(const char *n, struct stat *st)
   close(fd);
   return r;
 }
-
+// atoi 음수 문자열 변환가능하도록 수정
 int
 atoi(const char *s)
 {
-  int n;
+    int n = 0;
+    int sign = 1;
 
-  n = 0;
-  while('0' <= *s && *s <= '9')
-    n = n*10 + *s++ - '0';
-  return n;
+    // 문자열의 첫 문자가 '-'이면 음수, '+'이면 양수로 간주
+    if (*s == '-') {
+        sign = -1;
+        s++;
+    } else if (*s == '+') {
+        s++;
+    }
+
+    // 숫자 부분을 처리
+    while ('0' <= *s && *s <= '9') {
+        n = n * 10 + (*s - '0');
+        s++;
+    }
+
+    // 부호를 적용하여 결과 반환
+    return sign * n;
 }
+
 
 void*
 memmove(void *vdst, const void *vsrc, int n)

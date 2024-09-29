@@ -103,7 +103,7 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
-extern int sys_lseek(void);
+extern int sys_lseek(void);  // lseek 시스템 콜 함수 선언 (파일 오프셋을 설정하는 기능을 수행)
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -127,7 +127,7 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_lseek]   sys_lseek,
+[SYS_lseek]   sys_lseek,  // lseek 시스템 콜 함수 매핑 (파일 내에서 오프셋을 이동하는 함수)
 };
 
 void

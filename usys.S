@@ -29,4 +29,4 @@ SYSCALL(getpid)
 SYSCALL(sbrk)
 SYSCALL(sleep)
 SYSCALL(uptime)
-SYSCALL(lseek)
+SYSCALL(lseek)  #시스템 콜 추가를 위해 작성

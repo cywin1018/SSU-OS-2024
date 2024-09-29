@@ -1,7 +1,6 @@
 struct stat;
 struct rtcdate;
 #include "types.h"
-// typedef int off_t;
 
 // system calls
 int fork(void);
@@ -25,7 +24,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int lseek(int fd, int offset, int whence);
+int lseek(int fd, int offset, int whence); // lseek 사용을 위한 함수 프로토타입 작성
 
 // ulib.c
 int stat(const char*, struct stat*);
