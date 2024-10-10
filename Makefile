@@ -89,7 +89,10 @@ endif
 ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
-
+ifeq ($(debug),1)
+CFLAGS += -DDEBUG
+endif
+# 디버깅 용으로 코드 추가
 xv6.img: bootblock kernel
 	dd if=/dev/zero of=xv6.img count=10000
 	dd if=bootblock of=xv6.img conv=notrunc
@@ -183,6 +186,7 @@ UPROGS=\
 	_zombie\
 	_helloxv6\
 	_lseektest\
+	
 
 fs.img: mkfs README hello.txt $(UPROGS)
 	./mkfs fs.img README hello.txt $(UPROGS)
@@ -219,7 +223,7 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
 ifndef CPUS
-CPUS := 2
+CPUS := 1 # cpu 갯수 1개로 수정(Makefile 명세서)
 endif
 QEMUOPTS = -drive file=fs.img,index=1,media=disk,format=raw -drive file=xv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 512 $(QEMUEXTRA)
 
