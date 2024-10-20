@@ -89,3 +89,27 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+/*과제2번 set_proc_info함수 추가*/
+int
+sys_set_proc_info(void)
+{
+  int q_level, cpu_burst, cpu_wait_time, io_wait_time, end_time;
+
+  // 인자 받기용
+  if(argint(0,&q_level) < 0 || argint(1, &cpu_burst) < 0 ||
+    argint(2, &cpu_wait_time) < 0 || argint(3, &io_wait_time) < 0 ||
+    argint(4, &end_time) < 0)
+  return -1;
+
+  struct proc *p = myproc(); // 현재 프로세스
+
+  // 값을 아래에서 설정 해줌
+  p->q_level = q_level;
+  p->cpu_burst = cpu_burst;
+  p->cpu_wait_time = cpu_wait_time;
+  p->io_wait_time = io_wait_time;
+  p->end_time = end_time;
+
+  return 0;
+}

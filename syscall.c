@@ -104,6 +104,8 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_lseek(void);  // lseek 시스템 콜 함수 선언 (파일 오프셋을 설정하는 기능을 수행)
+extern int sys_set_proc_info(void); // 과제2번을 위한 시스템 콜 테이블에 추가
+
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -128,6 +130,7 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_lseek]   sys_lseek,  // lseek 시스템 콜 함수 매핑 (파일 내에서 오프셋을 이동하는 함수)
+[SYS_set_proc_info]  sys_set_proc_info, // 과제 2번을 위한 코드 추가 
 };
 
 void

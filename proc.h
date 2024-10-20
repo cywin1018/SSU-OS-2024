@@ -49,6 +49,12 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  /* 과제2번을 위한 proc 구조체에 변수 추가*/
+  int q_level;            // 프로세스가 어떤 큐레벨에 있는지
+  int cpu_burst;          // CPU 사용 시간
+  int cpu_wait;      // runnable 후 큐 내에서 대기시간
+  int io_wait_time;       // 큐에서 sleeping 상태시간
+  int end_time;           // cpu 총 사용 할당량
 };
 
 // Process memory is laid out contiguously, low addresses first:
