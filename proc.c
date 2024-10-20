@@ -21,11 +21,6 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
-struct node{
-  struct proc *cur;
-  
-}
-
 
 void
 pinit(void)
@@ -99,7 +94,7 @@ found:
   /* 새로운 필드 초기화 */
   p->q_level = 0;
   p->cpu_burst = 0;
-  p->cpu_wait_time = 0;
+  p->cpu_wait = 0;
   p->io_wait_time = 0;
   p->end_time = -1;
 
@@ -336,67 +331,67 @@ wait(void)
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 
-// // 기존 분석용 스케쥴러(주석처리)
-// void
-// scheduler(void)
-// {
-//   struct proc *p;
-//   struct cpu *c = mycpu();
-//   c->proc = 0;
-  
-//   for(;;){
-//     // Enable interrupts on this processor.
-//     sti();
-
-//     // Loop over process table looking for process to run.
-//     acquire(&ptable.lock);
-//     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ // 모든 프로세스를 순회
-//       if(p->state != RUNNABLE) // 프로세스의 상태가 RUNNABLE이 아니면 넘어감
-//         continue;
-
-//       // Switch to chosen process.  It is the process's job
-//       // to release ptable.lock and then reacquire it
-//       // before jumping back to us.
-//       c->proc = p; // cpu의 proc 필드에 현재 선택된 프로세스를 저장
-//       switchuvm(p); // 프로세스의 사용자 모드 페이지 테이블로 전환
-//       p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경
-
-//       swtch(&(c->scheduler), p->context); // 스케쥴러의 컨텍스트를 저장하고 선택된 프로세스의 컨텍스트로 전환
-//       switchkvm(); // 커널 모드 페이지 테이블로 다시 전환
-
-//       // Process is done running for now.
-//       // It should have changed its p->state before coming back.
-//       c->proc = 0;
-//     }
-//     release(&ptable.lock); // 프로세스 테이블 락 해제
-
-//   }
-// }
-
-// 우선순위 큐를 적용하는 스케쥴러
+// 기존 분석용 스케쥴러(주석처리)
 void
 scheduler(void)
 {
-    struct proc *p;
-    struct cpu *c = mycpu();
-    c->proc = 0;
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
 
-    for(;;){
-        sti();
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ // 모든 프로세스를 순회
+      if(p->state != RUNNABLE) // 프로세스의 상태가 RUNNABLE이 아니면 넘어감
+        continue;
 
-        acquire(&ptable.lock)
-        /*원래라면 라운드 로빈으로 단일 큐를 탐색하지만 
-        우선적으로 모든 큐를 처음부터 탐색해야하지 않나?
-        그래서 여기에서 MLFQ를 초기화할 필요가 있다고 생각한다.
-        또한 4개의 큐를 생성(링크드리스트 or 배열)
-        서로 참조할것 까진 없고, TQ를 저장하거나 해서
-        동작하면 될것 같다.
-        */ 
-        for(p = ptable.proc;p<&ptable.proc[NPROC];p++){
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p; // cpu의 proc 필드에 현재 선택된 프로세스를 저장
+      switchuvm(p); // 프로세스의 사용자 모드 페이지 테이블로 전환
+      p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경
 
-        }       
+      swtch(&(c->scheduler), p->context); // 스케쥴러의 컨텍스트를 저장하고 선택된 프로세스의 컨텍스트로 전환
+      switchkvm(); // 커널 모드 페이지 테이블로 다시 전환
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
     }
+    release(&ptable.lock); // 프로세스 테이블 락 해제
+
+  }
 }
+
+// // 우선순위 큐를 적용하는 스케쥴러
+// void
+// scheduler(void)
+// {
+//     struct proc *p;
+//     struct cpu *c = mycpu();
+//     c->proc = 0;
+
+//     for(;;){
+//         sti();
+
+//         acquire(&ptable.lock)
+//         /*원래라면 라운드 로빈으로 단일 큐를 탐색하지만 
+//         우선적으로 모든 큐를 처음부터 탐색해야하지 않나?
+//         그래서 여기에서 MLFQ를 초기화할 필요가 있다고 생각한다.
+//         또한 4개의 큐를 생성(링크드리스트 or 배열)
+//         서로 참조할것 까진 없고, TQ를 저장하거나 해서
+//         동작하면 될것 같다.
+//         */ 
+//         for(p = ptable.proc;p<&ptable.proc[NPROC];p++){
+
+//         }       
+//     }
+// }
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
