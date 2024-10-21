@@ -1,3 +1,6 @@
+#define NQUEUE 4  // 큐의 개수
+#define AGING_THRESHOLD 250  // Aging 적용 기준 틱
+int set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int end_time);
 // Per-CPU state
 struct cpu {
   uchar apicid;                // Local APIC ID
@@ -62,3 +65,4 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+int get_time_quantum(int level);

@@ -20,7 +20,12 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+void move_to_lower_queue(struct proc *p);
+void aging(void);
+void remove_from_queue(int level, struct proc *p);
 
+struct proc* queue[NQUEUE][NPROC];  // 다단계 피드백 큐
+int queue_size[NQUEUE];             // 각 큐의 크기
 
 void
 pinit(void)
@@ -91,15 +96,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
-  /* 새로운 필드 초기화 */
-  p->q_level = 0;
-  p->cpu_burst = 0;
-  p->cpu_wait = 0;
-  p->io_wait_time = 0;
-  p->end_time = -1;
-
-  /* =============================== */
-
+ 
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -122,6 +119,19 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+
+
+  p->q_level = 0;  // 새 프로세스는 최상위 큐에 배치
+  p->cpu_burst = 0;
+  p->cpu_wait = 0;
+  p->io_wait_time = 0;
+  p->end_time = 0;
+   // idle, init, shell 프로세스 처리
+  if(p->pid <= 2) {
+    p->q_level = 3;  // 최하위 큐에 배치
+  }
+   // 큐에 프로세스 추가
+  queue[p->q_level][queue_size[p->q_level]++] = p;
 
   return p;
 }
@@ -331,7 +341,43 @@ wait(void)
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 
-// 기존 분석용 스케쥴러(주석처리)
+// // 기존 분석용 스케쥴러(주석처리)
+// void
+// scheduler(void)
+// {
+//   struct proc *p;
+//   struct cpu *c = mycpu();
+//   c->proc = 0;
+  
+//   for(;;){
+//     // Enable interrupts on this processor.
+//     sti();
+
+//     // Loop over process table looking for process to run.
+//     acquire(&ptable.lock);
+//     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ // 모든 프로세스를 순회
+//       if(p->state != RUNNABLE) // 프로세스의 상태가 RUNNABLE이 아니면 넘어감
+//         continue;
+
+//       // Switch to chosen process.  It is the process's job
+//       // to release ptable.lock and then reacquire it
+//       // before jumping back to us.
+//       c->proc = p; // cpu의 proc 필드에 현재 선택된 프로세스를 저장
+//       switchuvm(p); // 프로세스의 사용자 모드 페이지 테이블로 전환
+//       p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경
+
+//       swtch(&(c->scheduler), p->context); // 스케쥴러의 컨텍스트를 저장하고 선택된 프로세스의 컨텍스트로 전환
+//       switchkvm(); // 커널 모드 페이지 테이블로 다시 전환
+
+//       // Process is done running for now.
+//       // It should have changed its p->state before coming back.
+//       c->proc = 0;
+//     }
+//     release(&ptable.lock); // 프로세스 테이블 락 해제
+
+//   }
+// }
+
 void
 scheduler(void)
 {
@@ -340,58 +386,43 @@ scheduler(void)
   c->proc = 0;
   
   for(;;){
-    // Enable interrupts on this processor.
+    // 프로세스 검색을 위해 인터럽트 비활성화
     sti();
 
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ // 모든 프로세스를 순회
-      if(p->state != RUNNABLE) // 프로세스의 상태가 RUNNABLE이 아니면 넘어감
-        continue;
+    for(int level = 0; level < NQUEUE; level++) {
+      for(int i = 0; i < queue_size[level]; i++) {
+        p = queue[level][i];
+        if(p->state != RUNNABLE)
+          continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p; // cpu의 proc 필드에 현재 선택된 프로세스를 저장
-      switchuvm(p); // 프로세스의 사용자 모드 페이지 테이블로 전환
-      p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경
+        // 프로세스 실행
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context); // 스케쥴러의 컨텍스트를 저장하고 선택된 프로세스의 컨텍스트로 전환
-      switchkvm(); // 커널 모드 페이지 테이블로 다시 전환
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+        // 프로세스 실행 후 처리
+        c->proc = 0;
+        
+        // Time Quantum 체크 및 큐 이동
+        if(p->cpu_burst >= get_time_quantum(level)) {
+          move_to_lower_queue(p);
+        }
+        
+        // Aging 처리
+        aging();
+
+        break;
+      }
+      if(c->proc)
+        break;
     }
-    release(&ptable.lock); // 프로세스 테이블 락 해제
-
+    release(&ptable.lock);
   }
 }
-
-// // 우선순위 큐를 적용하는 스케쥴러
-// void
-// scheduler(void)
-// {
-//     struct proc *p;
-//     struct cpu *c = mycpu();
-//     c->proc = 0;
-
-//     for(;;){
-//         sti();
-
-//         acquire(&ptable.lock)
-//         /*원래라면 라운드 로빈으로 단일 큐를 탐색하지만 
-//         우선적으로 모든 큐를 처음부터 탐색해야하지 않나?
-//         그래서 여기에서 MLFQ를 초기화할 필요가 있다고 생각한다.
-//         또한 4개의 큐를 생성(링크드리스트 or 배열)
-//         서로 참조할것 까진 없고, TQ를 저장하거나 해서
-//         동작하면 될것 같다.
-//         */ 
-//         for(p = ptable.proc;p<&ptable.proc[NPROC];p++){
-
-//         }       
-//     }
-// }
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -420,15 +451,23 @@ sched(void)
 }
 
 // Give up the CPU for one scheduling round.
+// void
+// yield(void)
+// {
+//     acquire(&ptable.lock);
+//     myproc()->state = RUNNABLE;
+//     sched();
+//     release(&ptable.lock);
+// }
 void
 yield(void)
 {
-    acquire(&ptable.lock);
-    myproc()->state = RUNNABLE;
-    sched();
-    release(&ptable.lock);
+  acquire(&ptable.lock);
+  myproc()->state = RUNNABLE;
+  move_to_lower_queue(myproc());
+  sched();
+  release(&ptable.lock);
 }
-
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
 void
@@ -569,4 +608,74 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int get_time_quantum(int level) {
+  switch(level) {
+    case 0: return 10;
+    case 1: return 20;
+    case 2: return 40;
+    case 3: return 80;
+    default: return 80;
+  }
+}
+
+void move_to_lower_queue(struct proc *p) {
+  if(p->q_level < NQUEUE - 1) {
+    // 현재 큐에서 제거
+    remove_from_queue(p->q_level, p);
+    
+    // 다음 레벨 큐에 추가
+    p->q_level++;
+    queue[p->q_level][queue_size[p->q_level]++] = p;
+    
+    // CPU 버스트 초기화
+    p->cpu_burst = 0;
+  }
+}
+
+void aging(void) {
+  struct proc *p;
+  
+  for(int level = 1; level < NQUEUE; level++) {
+    for(int i = 0; i < queue_size[level]; i++) {
+      p = queue[level][i];
+      if(p->cpu_wait >= AGING_THRESHOLD) {
+        // 상위 큐로 이동
+        remove_from_queue(level, p);
+        p->q_level--;
+        queue[p->q_level][queue_size[p->q_level]++] = p;
+        p->cpu_wait = 0;
+      }
+    }
+  }
+}
+
+void remove_from_queue(int level, struct proc *p) {
+  int i;
+  for(i = 0; i < queue_size[level]; i++) {
+    if(queue[level][i] == p) {
+      break;
+    }
+  }
+  for(; i < queue_size[level] - 1; i++) {
+    queue[level][i] = queue[level][i+1];
+  }
+  queue_size[level]--;
+}
+
+int
+set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int end_time)
+{
+  struct proc *p = myproc();
+  
+  acquire(&ptable.lock);
+  p->q_level = q_level;
+  p->cpu_burst = cpu_burst;
+  p->cpu_wait = cpu_wait;
+  p->io_wait_time = io_wait_time;
+  p->end_time = end_time;
+  release(&ptable.lock);
+  
+  return 0;
 }

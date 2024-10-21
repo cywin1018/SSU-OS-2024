@@ -24,7 +24,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int lseek(int fd, int offset, int whence); // lseek 사용을 위한 함수 프로토타입 작성
+int set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int end_time);
 
 // ulib.c
 int stat(const char*, struct stat*);
