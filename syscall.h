@@ -20,5 +20,4 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
-#define SYS_lseek  22 // 새로운 시스템 콜 번호 추가
-#define SYS_set_proc_info  23 // 과제 2번을 위한 새로운 시스템 콜 번호 추가
+#define SYS_set_proc_info  22 // 과제 2번을 위한 새로운 시스템 콜 번호 추가

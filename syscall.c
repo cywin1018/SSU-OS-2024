@@ -129,7 +129,6 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_lseek]   sys_lseek,  // lseek 시스템 콜 함수 매핑 (파일 내에서 오프셋을 이동하는 함수)
 [SYS_set_proc_info]  sys_set_proc_info, // 과제 2번을 위한 코드 추가 
 };
 
