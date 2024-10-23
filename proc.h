@@ -58,6 +58,7 @@ struct proc {
   int cpu_wait;      // runnable 후 큐 내에서 대기시간
   int io_wait_time;       // 큐에서 sleeping 상태시간
   int end_time;           // cpu 총 사용 할당량
+  int remaining_time; 
 };
 
 // Process memory is laid out contiguously, low addresses first:

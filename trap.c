@@ -102,14 +102,20 @@ trap(struct trapframe *tf)
 
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
- // 타이머 인터럽트 처리
-  if(myproc() && myproc()->state == RUNNING &&
-     tf->trapno == T_IRQ0+IRQ_TIMER) {
-    myproc()->cpu_burst++;
-    if(myproc()->cpu_burst >= get_time_quantum(myproc()->q_level)) {
+// 타이머 인터럽트 처리
+if(myproc() && myproc()->state == RUNNING &&
+   tf->trapno == T_IRQ0+IRQ_TIMER) {
+  struct proc *p = myproc();
+  
+  if(p->pid > 2 && p->end_time > 0) {
+    p->cpu_burst++;
+    
+    int quantum = get_time_quantum(p->q_level);
+    if(p->cpu_burst >= quantum) {
       yield();
     }
   }
+}
 
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)

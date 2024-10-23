@@ -84,11 +84,9 @@ allocproc(void)
   char *sp;
 
   acquire(&ptable.lock);
-
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == UNUSED)
       goto found;
-
   release(&ptable.lock);
   return 0;
 
@@ -96,7 +94,6 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
- 
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -120,22 +117,27 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-
-  p->q_level = 0;  // 새 프로세스는 최상위 큐에 배치
+  // 초기화 추가
   p->cpu_burst = 0;
   p->cpu_wait = 0;
   p->io_wait_time = 0;
-  p->end_time = 0;
-   // idle, init, shell 프로세스 처리
+  
+  // init, shell 프로세스 특별 처리
   if(p->pid <= 2) {
-    p->q_level = 3;  // 최하위 큐에 배치
+    p->q_level = 3;    // 최하위 큐에 배치
+    p->end_time = -1;  // 종료 시간 없음
+    p->remaining_time = -1;
+  } else {
+    p->q_level = 0;    // 새 프로세스는 최상위 큐에 배치
+    p->end_time = 0;
+    p->remaining_time = 0;
   }
-   // 큐에 프로세스 추가
+
+  // 큐에 프로세스 추가
   queue[p->q_level][queue_size[p->q_level]++] = p;
 
   return p;
 }
-
 //PAGEBREAK: 32
 // Set up first user process.
 void
@@ -386,10 +388,9 @@ scheduler(void)
   c->proc = 0;
   
   for(;;){
-    // 프로세스 검색을 위해 인터럽트 비활성화
     sti();
-
     acquire(&ptable.lock);
+    
     for(int level = 0; level < NQUEUE; level++) {
       for(int i = 0; i < queue_size[level]; i++) {
         p = queue[level][i];
@@ -401,20 +402,43 @@ scheduler(void)
         switchuvm(p);
         p->state = RUNNING;
 
+        int quantum = get_time_quantum(level);
+        
+        // CPU 사용 시간 및 남은 시간 계산
+        if(p->pid > 2 && p->end_time > 0) {
+          int ticks_used = quantum;
+          if(p->remaining_time < quantum) {
+            ticks_used = p->remaining_time;
+          }
+          
+          // 프로세스 정보 출력
+          cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
+                p->pid, ticks_used, level, p->end_time - p->remaining_time, p->end_time);
+
+          // remaining_time 업데이트
+          p->remaining_time -= ticks_used;
+          p->cpu_burst += ticks_used;
+        }
+
         swtch(&(c->scheduler), p->context);
         switchkvm();
 
         // 프로세스 실행 후 처리
         c->proc = 0;
+
+        // 프로세스 종료 조건 체크
+        if(p->end_time > 0 && p->remaining_time <= 0) {
+          cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->end_time);
+          p->state = ZOMBIE;
+          break;
+        }
         
-        // Time Quantum 체크 및 큐 이동
-        if(p->cpu_burst >= get_time_quantum(level)) {
+        // 큐 이동 처리
+        if(p->pid > 2 && p->cpu_burst >= quantum && level < NQUEUE - 1) {
           move_to_lower_queue(p);
         }
         
-        // Aging 처리
         aging();
-
         break;
       }
       if(c->proc)
@@ -423,6 +447,7 @@ scheduler(void)
     release(&ptable.lock);
   }
 }
+
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -464,7 +489,12 @@ yield(void)
 {
   acquire(&ptable.lock);
   myproc()->state = RUNNABLE;
-  move_to_lower_queue(myproc());
+  
+  // 현재 레벨의 time quantum을 모두 사용한 경우에만 큐 이동
+  if(myproc()->cpu_burst >= get_time_quantum(myproc()->q_level)) {
+    move_to_lower_queue(myproc());
+  }
+  
   sched();
   release(&ptable.lock);
 }
@@ -664,6 +694,7 @@ void remove_from_queue(int level, struct proc *p) {
   queue_size[level]--;
 }
 
+// set_proc_info 함수 수정
 int
 set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int end_time)
 {
@@ -675,7 +706,17 @@ set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int en
   p->cpu_wait = cpu_wait;
   p->io_wait_time = io_wait_time;
   p->end_time = end_time;
+  p->remaining_time = end_time;  // remaining_time 초기화 추가
   release(&ptable.lock);
   
   return 0;
+}
+
+void
+print_process_info(struct proc *p)
+{
+  if(p->state == RUNNING) {
+    cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
+            p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
+  }
 }
