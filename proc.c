@@ -23,6 +23,7 @@ static void wakeup1(void *chan);
 void move_to_lower_queue(struct proc *p);
 void aging(void);
 void remove_from_queue(int level, struct proc *p);
+void aging(void);
 
 struct proc* queue[NQUEUE][NPROC];  // 다단계 피드백 큐
 int queue_size[NQUEUE];             // 각 큐의 크기
@@ -388,9 +389,7 @@ wait(void)
 //   }
 // }
 
-void
-scheduler(void)
-{
+void scheduler(void) {
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
@@ -399,39 +398,36 @@ scheduler(void)
     sti();
     acquire(&ptable.lock);
     
+    // Start from highest priority queue
     for(int level = 0; level < NQUEUE; level++) {
+      int found = 0;
       for(int i = 0; i < queue_size[level]; i++) {
         p = queue[level][i];
         if(p->state != RUNNABLE)
           continue;
-
+        
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
-        // p->cpu_burst = 0;  // 프로세스 실행 시 cpu_burst 초기화
-
-        // total_used 계산
-        // int total_used = p->end_time - p->remaining_time;
-
-        // if(p->pid > 2 && p->end_time > 0) {
-        //   cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-        //           p->pid, p->cpu_burst, level, total_used, p->end_time);
-        // }
-
-
-
+        
         swtch(&(c->scheduler), p->context);
         switchkvm();
         c->proc = 0;
         
-        break;
+        found = 1;
+        break; // Break after scheduling one process from this level
       }
-      if(c->proc)
-        break;
+      if(found)
+        break; // Move to next scheduling cycle
     }
+    
+    // Call aging function
+    aging();
+    
     release(&ptable.lock);
   }
 }
+
 
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -470,22 +466,21 @@ sched(void)
 //     release(&ptable.lock);
 // }
 // yield() 함수에서 수정
-void
-yield(void)
-{
+void yield(void) {
   acquire(&ptable.lock);
   myproc()->state = RUNNABLE;
 
   if(myproc()->cpu_burst >= get_time_quantum(myproc()->q_level)) {
     if(myproc()->q_level < NQUEUE - 1) {
       move_to_lower_queue(myproc());
-    } 
-     myproc()->cpu_burst = 0;  // 최하위 큐에서는 cpu_burst를 여기서 초기화
+    }  
+    myproc()->cpu_burst = 0;
   }
 
   sched();
   release(&ptable.lock);
 }
+
 
 
 // A fork child's very first scheduling by scheduler()
@@ -643,65 +638,81 @@ int get_time_quantum(int level) {
 
 void move_to_lower_queue(struct proc *p) {
   if(p->q_level < NQUEUE - 1) {
-    // 현재 큐에서 제거
     remove_from_queue(p->q_level, p);
-    
-    // 다음 레벨 큐에 추가
     p->q_level++;
     queue[p->q_level][queue_size[p->q_level]++] = p;
-    
-    // CPU 버스트 초기화
+    p->cpu_burst = 0;
+    p->cpu_wait = 0; // Reset wait time when moving down
+  } else {
+    // If already at the lowest queue, just reset cpu_burst
     p->cpu_burst = 0;
   }
 }
 
+
 void aging(void) {
   struct proc *p;
   
-  for(int level = 1; level < NQUEUE; level++) {
+  for(int level = 1; level < NQUEUE; level++) { // Start from level 1
     for(int i = 0; i < queue_size[level]; i++) {
       p = queue[level][i];
-      if(p->cpu_wait >= AGING_THRESHOLD) {
-        // 상위 큐로 이동
-        remove_from_queue(level, p);
-        p->q_level--;
-        queue[p->q_level][queue_size[p->q_level]++] = p;
-        p->cpu_wait = 0;
+      if(p->state == RUNNABLE) {
+        if(p != mycpu()->proc) { // Exclude the currently running process
+          p->cpu_wait += 1; // Increment cpu_wait by 1 tick
+        }
+        if(p->cpu_wait >= AGING_THRESHOLD) {
+          // Move the process up one queue level
+          remove_from_queue(level, p);
+          p->q_level--;
+          p->cpu_wait = 0; // Reset cpu_wait
+          queue[p->q_level][queue_size[p->q_level]++] = p;
+          cprintf("PID: %d Aging\n", p->pid);
+        }
       }
     }
   }
 }
 
+
 void remove_from_queue(int level, struct proc *p) {
   int i;
   for(i = 0; i < queue_size[level]; i++) {
     if(queue[level][i] == p) {
+      // Shift the remaining processes
+      for(; i < queue_size[level] - 1; i++) {
+        queue[level][i] = queue[level][i + 1];
+      }
+      queue_size[level]--;
       break;
     }
   }
-  for(; i < queue_size[level] - 1; i++) {
-    queue[level][i] = queue[level][i+1];
-  }
-  queue_size[level]--;
 }
 
+
 // set_proc_info 함수 수정
-int
-set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int end_time)
-{
+int set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, int end_time) {
   struct proc *p = myproc();
-  
+
   acquire(&ptable.lock);
+
+  // Remove from current queue
+  remove_from_queue(p->q_level, p);
+
+  // Set process information
   p->q_level = q_level;
   p->cpu_burst = cpu_burst;
   p->cpu_wait = cpu_wait;
   p->io_wait_time = io_wait_time;
   p->end_time = end_time;
-  p->remaining_time = end_time;  // remaining_time 초기화 추가
+  p->remaining_time = end_time;
+
+  // Add to new queue
+  queue[p->q_level][queue_size[p->q_level]++] = p;
+
   release(&ptable.lock);
-  
   return 0;
 }
+
 
 void
 print_process_info(struct proc *p)
@@ -711,3 +722,4 @@ print_process_info(struct proc *p)
             p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
   }
 }
+

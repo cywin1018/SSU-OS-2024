@@ -112,6 +112,10 @@ if(myproc() && myproc()->state == RUNNING &&
     p->remaining_time--;
 
     int quantum = get_time_quantum(p->q_level);
+
+    // Reset cpu_wait since the process is running
+    p->cpu_wait = 0;
+    
     if(p->remaining_time <= 0) {
       // 프로세스 종료 전에 정보 출력
       int total_used = p->end_time - p->remaining_time;
@@ -127,6 +131,7 @@ if(myproc() && myproc()->state == RUNNING &&
 
       yield();
     }
+    p->cpu_wait = 0;
   }
 }
 
