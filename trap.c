@@ -118,16 +118,22 @@ if(myproc() && myproc()->state == RUNNING &&
     
     if(p->remaining_time <= 0) {
       // 프로세스 종료 전에 정보 출력
-      int total_used = p->end_time - p->remaining_time;
-      cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-              p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+       
+       #ifdef DEBUG
+              int total_used = p->end_time - p->remaining_time;
+              cprintf("PIDsss: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+                      p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+       #endif
 
       p->killed = 1;  // 프로세스 종료 설정
     } else if(p->cpu_burst >= quantum) {
       // Time Quantum 만료 시 정보 출력
-      int total_used = p->end_time - p->remaining_time;
-      cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-              p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+       
+       #ifdef DEBUG
+              int total_used = p->end_time - p->remaining_time;
+              cprintf("PIDaaa: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+                      p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+       #endif
 
       yield();
     }

@@ -275,7 +275,9 @@ exit(void)
 
   // 종료 메시지 출력
   if(curproc->pid > 2 && curproc->end_time > 0) {
-    cprintf("PID: %d, used %d ticks. terminated\n", curproc->pid, curproc->end_time);
+    #ifdef DEBUG
+          cprintf("PID: %d, used %d ticks. terminated\n", curproc->pid, curproc->end_time);
+    #endif
   }
       // 큐에서 프로세스 제거
   remove_from_queue(curproc->q_level, curproc);
@@ -666,7 +668,9 @@ void aging(void) {
           p->q_level--;
           p->cpu_wait = 0; // Reset cpu_wait
           queue[p->q_level][queue_size[p->q_level]++] = p;
-          cprintf("PID: %d Aging\n", p->pid);
+          #ifdef DEBUG
+                 cprintf("PID: %d Aging\n", p->pid);
+          #endif
         }
       }
     }
@@ -717,9 +721,11 @@ int set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, in
 void
 print_process_info(struct proc *p)
 {
-  if(p->state == RUNNING) {
-    cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
-            p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
-  }
+  #ifdef DEBUG
+          if(p->state == RUNNING) {
+            cprintf("PIDss: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
+                    p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
+          }
+  #endif
 }
 

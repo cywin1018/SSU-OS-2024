@@ -6,6 +6,8 @@ int main(int argc, char *argv[])
 {
   printf(1, "start scheduler_test\n");
 
+
+  #ifdef DEBUG
   for(int i = 0; i < 3; i++) {
     int pid = fork();
     if(pid < 0) {
@@ -14,6 +16,7 @@ int main(int argc, char *argv[])
     }
     if(pid == 0) {
       // Child process
+    
       printf(1, "PID: %d created\n", getpid());
       sleep(10);
       if(set_proc_info(1, 0, 0, 0, 500) < 0) {  
@@ -22,6 +25,7 @@ int main(int argc, char *argv[])
       }
       printf(1, "Set process %d's info complete\n", getpid());
       while(1);
+
     }
   }
 
@@ -31,4 +35,8 @@ int main(int argc, char *argv[])
 
   printf(1, "end of scheduler_test\n");
   exit();
+  #endif
+  printf(1, "end of scheduler_test\n"); 
+  exit();
+ 
 }
