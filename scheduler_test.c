@@ -16,7 +16,7 @@ main(int argc, char *argv[])
   if(pid == 0) {
     // 자식 프로세스
     printf(1, "PID: %d created\n", getpid());
-    if(set_proc_info(0, 0, 0, 0, 500) < 0) {  // 반드시 레벨 0에서 시작
+    if(set_proc_info(1, 0, 0, 0, 500) < 0) {  // 반드시 레벨 0에서 시작
       printf(1, "set_proc_info failed\n");
       exit();
     }

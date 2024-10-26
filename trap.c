@@ -106,17 +106,32 @@ trap(struct trapframe *tf)
 if(myproc() && myproc()->state == RUNNING &&
    tf->trapno == T_IRQ0+IRQ_TIMER) {
   struct proc *p = myproc();
-  
+
   if(p->pid > 2 && p->end_time > 0) {
     p->cpu_burst++;
     p->remaining_time--;
-    
+
     int quantum = get_time_quantum(p->q_level);
-    if(p->cpu_burst >= quantum || p->remaining_time <= 0) {
+    if(p->remaining_time <= 0) {
+      // 프로세스 종료 전에 정보 출력
+      int total_used = p->end_time - p->remaining_time;
+      cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+              p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+
+      p->killed = 1;  // 프로세스 종료 설정
+    } else if(p->cpu_burst >= quantum) {
+      // Time Quantum 만료 시 정보 출력
+      int total_used = p->end_time - p->remaining_time;
+      cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+              p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+
       yield();
     }
   }
 }
+
+
+
 
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)

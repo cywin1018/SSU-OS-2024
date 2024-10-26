@@ -272,6 +272,14 @@ exit(void)
 
   acquire(&ptable.lock);
 
+  // 종료 메시지 출력
+  if(curproc->pid > 2 && curproc->end_time > 0) {
+    cprintf("PID: %d, used %d ticks. terminated\n", curproc->pid, curproc->end_time);
+  }
+      // 큐에서 프로세스 제거
+  remove_from_queue(curproc->q_level, curproc);
+
+
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
 
@@ -400,37 +408,17 @@ scheduler(void)
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
+        // p->cpu_burst = 0;  // 프로세스 실행 시 cpu_burst 초기화
 
-        if(p->pid > 2 && p->end_time > 0) {
-          int quantum = get_time_quantum(level);
-          int ticks_to_use = quantum;
-          
-          if(p->remaining_time < quantum) {
-            ticks_to_use = p->remaining_time;
-          }
+        // total_used 계산
+        // int total_used = p->end_time - p->remaining_time;
 
-          // 현재 레벨의 타임 퀀텀 사용
-          p->cpu_burst = ticks_to_use;
-          int old_total = p->end_time - p->remaining_time;
-          p->remaining_time -= ticks_to_use;
+        // if(p->pid > 2 && p->end_time > 0) {
+        //   cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+        //           p->pid, p->cpu_burst, level, total_used, p->end_time);
+        // }
 
-          // 프로세스 정보 출력
-          cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
-                 p->pid, ticks_to_use, level, old_total + ticks_to_use, p->end_time);
 
-          // 프로세스 종료 체크
-          if(p->remaining_time <= 0) {
-            cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->end_time);
-            p->state = ZOMBIE;
-            break;
-          }
-
-          // 현재 큐의 타임 퀀텀을 모두 사용했다면 다음 레벨로 이동
-          if(level < NQUEUE - 1 && p->cpu_burst >= quantum) {
-            move_to_lower_queue(p);
-            p->cpu_burst = 0;  // 새 레벨에서 CPU 사용시간 초기화
-          }
-        }
 
         swtch(&(c->scheduler), p->context);
         switchkvm();
@@ -481,20 +469,25 @@ sched(void)
 //     sched();
 //     release(&ptable.lock);
 // }
+// yield() 함수에서 수정
 void
 yield(void)
 {
   acquire(&ptable.lock);
   myproc()->state = RUNNABLE;
-  
-  // 현재 레벨의 time quantum을 모두 사용한 경우에만 큐 이동
+
   if(myproc()->cpu_burst >= get_time_quantum(myproc()->q_level)) {
-    move_to_lower_queue(myproc());
+    if(myproc()->q_level < NQUEUE - 1) {
+      move_to_lower_queue(myproc());
+    } 
+     myproc()->cpu_burst = 0;  // 최하위 큐에서는 cpu_burst를 여기서 초기화
   }
-  
+
   sched();
   release(&ptable.lock);
 }
+
+
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
 void
