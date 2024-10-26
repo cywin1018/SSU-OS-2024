@@ -109,9 +109,10 @@ if(myproc() && myproc()->state == RUNNING &&
   
   if(p->pid > 2 && p->end_time > 0) {
     p->cpu_burst++;
+    p->remaining_time--;
     
     int quantum = get_time_quantum(p->q_level);
-    if(p->cpu_burst >= quantum) {
+    if(p->cpu_burst >= quantum || p->remaining_time <= 0) {
       yield();
     }
   }

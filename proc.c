@@ -125,8 +125,8 @@ found:
   // init, shell 프로세스 특별 처리
   if(p->pid <= 2) {
     p->q_level = 3;    // 최하위 큐에 배치
-    p->end_time = -1;  // 종료 시간 없음
-    p->remaining_time = -1;
+    p->end_time = 0;   // 종료 시간을 0으로 설정 (무한 실행)
+    p->remaining_time = 0;
   } else {
     p->q_level = 0;    // 새 프로세스는 최상위 큐에 배치
     p->end_time = 0;
@@ -397,48 +397,45 @@ scheduler(void)
         if(p->state != RUNNABLE)
           continue;
 
-        // 프로세스 실행
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
 
-        int quantum = get_time_quantum(level);
-        
-        // CPU 사용 시간 및 남은 시간 계산
         if(p->pid > 2 && p->end_time > 0) {
-          int ticks_used = quantum;
-          if(p->remaining_time < quantum) {
-            ticks_used = p->remaining_time;
-          }
+          int quantum = get_time_quantum(level);
+          int ticks_to_use = quantum;
           
+          if(p->remaining_time < quantum) {
+            ticks_to_use = p->remaining_time;
+          }
+
+          // 현재 레벨의 타임 퀀텀 사용
+          p->cpu_burst = ticks_to_use;
+          int old_total = p->end_time - p->remaining_time;
+          p->remaining_time -= ticks_to_use;
+
           // 프로세스 정보 출력
           cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
-                p->pid, ticks_used, level, p->end_time - p->remaining_time, p->end_time);
+                 p->pid, ticks_to_use, level, old_total + ticks_to_use, p->end_time);
 
-          // remaining_time 업데이트
-          p->remaining_time -= ticks_used;
-          p->cpu_burst += ticks_used;
+          // 프로세스 종료 체크
+          if(p->remaining_time <= 0) {
+            cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->end_time);
+            p->state = ZOMBIE;
+            break;
+          }
+
+          // 현재 큐의 타임 퀀텀을 모두 사용했다면 다음 레벨로 이동
+          if(level < NQUEUE - 1 && p->cpu_burst >= quantum) {
+            move_to_lower_queue(p);
+            p->cpu_burst = 0;  // 새 레벨에서 CPU 사용시간 초기화
+          }
         }
 
         swtch(&(c->scheduler), p->context);
         switchkvm();
-
-        // 프로세스 실행 후 처리
         c->proc = 0;
-
-        // 프로세스 종료 조건 체크
-        if(p->end_time > 0 && p->remaining_time <= 0) {
-          cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->end_time);
-          p->state = ZOMBIE;
-          break;
-        }
         
-        // 큐 이동 처리
-        if(p->pid > 2 && p->cpu_burst >= quantum && level < NQUEUE - 1) {
-          move_to_lower_queue(p);
-        }
-        
-        aging();
         break;
       }
       if(c->proc)
@@ -626,6 +623,7 @@ procdump(void)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
+
     if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
       state = states[p->state];
     else
