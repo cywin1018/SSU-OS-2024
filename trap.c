@@ -121,7 +121,7 @@ if(myproc() && myproc()->state == RUNNING &&
        
        #ifdef DEBUG
               int total_used = p->end_time - p->remaining_time;
-              cprintf("PIDsss: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+              cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
                       p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
        #endif
 
@@ -131,7 +131,7 @@ if(myproc() && myproc()->state == RUNNING &&
        
        #ifdef DEBUG
               int total_used = p->end_time - p->remaining_time;
-              cprintf("PIDaaa: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+              cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
                       p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
        #endif
 
@@ -140,9 +140,6 @@ if(myproc() && myproc()->state == RUNNING &&
     p->cpu_wait = 0;
   }
 }
-
-
-
 
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)

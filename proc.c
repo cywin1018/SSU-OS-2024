@@ -6,7 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
-#define min(a, b) ((a) < (b) ? (a) : (b))
+// #define min(a, b) ((a) < (b) ? (a) : (b))
 
 struct {
   struct spinlock lock;
@@ -20,10 +20,10 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+/* 함수 선언부 위로 올림 */
 void move_to_lower_queue(struct proc *p);
 void aging(void);
 void remove_from_queue(int level, struct proc *p);
-void aging(void);
 
 struct proc* queue[NQUEUE][NPROC];  // 다단계 피드백 큐
 int queue_size[NQUEUE];             // 각 큐의 크기
@@ -354,43 +354,6 @@ wait(void)
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 
-// // 기존 분석용 스케쥴러(주석처리)
-// void
-// scheduler(void)
-// {
-//   struct proc *p;
-//   struct cpu *c = mycpu();
-//   c->proc = 0;
-  
-//   for(;;){
-//     // Enable interrupts on this processor.
-//     sti();
-
-//     // Loop over process table looking for process to run.
-//     acquire(&ptable.lock);
-//     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ // 모든 프로세스를 순회
-//       if(p->state != RUNNABLE) // 프로세스의 상태가 RUNNABLE이 아니면 넘어감
-//         continue;
-
-//       // Switch to chosen process.  It is the process's job
-//       // to release ptable.lock and then reacquire it
-//       // before jumping back to us.
-//       c->proc = p; // cpu의 proc 필드에 현재 선택된 프로세스를 저장
-//       switchuvm(p); // 프로세스의 사용자 모드 페이지 테이블로 전환
-//       p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경
-
-//       swtch(&(c->scheduler), p->context); // 스케쥴러의 컨텍스트를 저장하고 선택된 프로세스의 컨텍스트로 전환
-//       switchkvm(); // 커널 모드 페이지 테이블로 다시 전환
-
-//       // Process is done running for now.
-//       // It should have changed its p->state before coming back.
-//       c->proc = 0;
-//     }
-//     release(&ptable.lock); // 프로세스 테이블 락 해제
-
-//   }
-// }
-
 void scheduler(void) {
   struct proc *p;
   struct cpu *c = mycpu();
@@ -458,15 +421,7 @@ sched(void)
   mycpu()->intena = intena;
 }
 
-// Give up the CPU for one scheduling round.
-// void
-// yield(void)
-// {
-//     acquire(&ptable.lock);
-//     myproc()->state = RUNNABLE;
-//     sched();
-//     release(&ptable.lock);
-// }
+
 // yield() 함수에서 수정
 void yield(void) {
   acquire(&ptable.lock);
@@ -677,7 +632,7 @@ void aging(void) {
   }
 }
 
-
+// 큐에서 삭제하는 함수
 void remove_from_queue(int level, struct proc *p) {
   int i;
   for(i = 0; i < queue_size[level]; i++) {
@@ -717,13 +672,13 @@ int set_proc_info(int q_level, int cpu_burst, int cpu_wait, int io_wait_time, in
   return 0;
 }
 
-
+// 출력하는 함수
 void
 print_process_info(struct proc *p)
 {
   #ifdef DEBUG
           if(p->state == RUNNING) {
-            cprintf("PIDss: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
+            cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n", 
                     p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
           }
   #endif

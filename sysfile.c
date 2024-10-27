@@ -443,37 +443,5 @@ sys_pipe(void)
   return 0;
 }
 
-int
-sys_lseek(void)
-{
-  int fd, offset, whence;    // 파일 디스크립터, 이동할 오프셋, 기준점을 저장할 변수 선언
-  struct file *f;            // 파일 구조체 포인터 선언
-
-  // 0번째 인자(fd), 1번째 인자(offset), 2번째 인자(whence)를 가져옴
-  // 인자를 제대로 가져오지 못하면 -1 반환
-  if (argint(0, &fd) < 0 || argint(1, &offset) < 0 || argint(2, &whence) < 0)
-    return -1;
-
-  // 파일 디스크립터가 가리키는 파일이 유효한지 검사 (유효하지 않으면 -1 반환)
-  if ((f = myproc()->ofile[fd]) == 0)
-    return -1;
-
-  // whence 값에 따라 파일 오프셋을 설정
-  switch (whence) {
-  case 0:  // SEEK_SET: 파일의 시작점으로부터 offset만큼 이동
-    f->off = offset;
-    break;
-  case 1:  // SEEK_CUR: 현재 위치로부터 offset만큼 이동
-    f->off += offset;
-    break;
-  case 2:  // SEEK_END: 파일 끝에서 offset만큼 이동
-    f->off = f->ip->size + offset;
-    break;
-  default: // 잘못된 whence 값일 경우 -1 반환
-    return -1;
-  }
-
-  return f->off;  // 파일의 새로운 오프셋 반환
-}
 
 

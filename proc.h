@@ -66,4 +66,4 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
-int get_time_quantum(int level);
+int get_time_quantum(int level); // 함수선언

@@ -103,7 +103,6 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
-extern int sys_lseek(void);  // lseek 시스템 콜 함수 선언 (파일 오프셋을 설정하는 기능을 수행)
 extern int sys_set_proc_info(void); // 과제2번을 위한 시스템 콜 테이블에 추가
 
 
