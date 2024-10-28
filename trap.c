@@ -14,7 +14,12 @@ extern struct {
 } ptable;
 
 extern void aging(void);  // aging 함수 선언
-
+extern struct proc* queue[NQUEUE][NPROC];  // 다단계 피드백 큐
+extern int queue_size[NQUEUE];             // 각 큐의 크기
+extern void remove_from_queue(int level, struct proc *p);
+extern void move_to_lower_queue(struct proc *p);
+extern int get_time_quantum(int level);
+#define AGING_THRESHOLD 250
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
@@ -113,6 +118,30 @@ trap(struct trapframe *tf)
 if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
     struct proc *p = myproc();
     if(p->pid > 2 && p->end_time > 0) {
+        acquire(&ptable.lock);  // 락 획득
+
+        // 다른 프로세스들의 wait time 증가 및 에이징 처리
+        struct proc *other;
+        for(int level = 1; level < NQUEUE; level++) {
+            for(int i = 0; i < queue_size[level]; i++) {
+                other = queue[level][i];
+                if(other != p && other->state == RUNNABLE) {
+                    other->cpu_wait++;
+                    // 에이징 조건 체크 (250틱)
+                    if(other->cpu_wait >= 250) {
+                        #ifdef DEBUG
+                        cprintf("PID: %d Aging\n", other->pid);
+                        #endif
+                        remove_from_queue(level, other);
+                        other->q_level--;
+                        other->cpu_wait = 0;
+                        queue[other->q_level][queue_size[other->q_level]++] = other;
+                    }
+                }
+            }
+        }
+
+        // 현재 프로세스 처리
         p->cpu_burst++;
         p->remaining_time--;
         int quantum = get_time_quantum(p->q_level);
@@ -121,15 +150,22 @@ if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
             #ifdef DEBUG
             cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
                     p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
-            // cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->end_time);
+        
             #endif
             p->killed = 1;
+            release(&ptable.lock);
         } else if(p->cpu_burst >= quantum) {
             #ifdef DEBUG
             cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
                     p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
             #endif
+            if(p->q_level < NQUEUE - 1) {
+                move_to_lower_queue(p);
+            }
+            release(&ptable.lock);
             yield();
+        } else {
+            release(&ptable.lock);
         }
     }
 }
