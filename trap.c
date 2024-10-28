@@ -7,6 +7,13 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
+// trap.c 상단에 추가
+extern struct {
+  struct spinlock lock;
+  struct proc proc[NPROC];
+} ptable;
+
+extern void aging(void);  // aging 함수 선언
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -103,44 +110,29 @@ trap(struct trapframe *tf)
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
 // 타이머 인터럽트 처리
-if(myproc() && myproc()->state == RUNNING &&
-   tf->trapno == T_IRQ0+IRQ_TIMER) {
-  struct proc *p = myproc();
+if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
+    struct proc *p = myproc();
+    if(p->pid > 2 && p->end_time > 0) {
+        p->cpu_burst++;
+        p->remaining_time--;
+        int quantum = get_time_quantum(p->q_level);
 
-  if(p->pid > 2 && p->end_time > 0) {
-    p->cpu_burst++;
-    p->remaining_time--;
-
-    int quantum = get_time_quantum(p->q_level);
-
-    // Reset cpu_wait since the process is running
-    p->cpu_wait = 0;
-    
-    if(p->remaining_time <= 0) {
-      // 프로세스 종료 전에 정보 출력
-       
-       #ifdef DEBUG
-              int total_used = p->end_time - p->remaining_time;
-              cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-                      p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
-       #endif
-
-      p->killed = 1;  // 프로세스 종료 설정
-    } else if(p->cpu_burst >= quantum) {
-      // Time Quantum 만료 시 정보 출력
-       
-       #ifdef DEBUG
-              int total_used = p->end_time - p->remaining_time;
-              cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-                      p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
-       #endif
-
-      yield();
+        if(p->remaining_time <= 0) {
+            #ifdef DEBUG
+            cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+                    p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
+            // cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->end_time);
+            #endif
+            p->killed = 1;
+        } else if(p->cpu_burst >= quantum) {
+            #ifdef DEBUG
+            cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+                    p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
+            #endif
+            yield();
+        }
     }
-    p->cpu_wait = 0;
-  }
 }
-
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)
     exit();

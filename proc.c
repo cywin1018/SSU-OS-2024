@@ -371,6 +371,7 @@ void scheduler(void) {
         if(p->state != RUNNABLE)
           continue;
         
+        // 스케줄링할 프로세스 선택
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
@@ -379,19 +380,26 @@ void scheduler(void) {
         switchkvm();
         c->proc = 0;
         
+        // 프로세스 실행 후, 큐의 맨 뒤로 이동
+        if(p->state == RUNNABLE) {
+          remove_from_queue(level, p);
+          queue[level][queue_size[level]++] = p;
+        }
+        
         found = 1;
-        break; // Break after scheduling one process from this level
+        break; // 현재 레벨에서 하나의 프로세스를 스케줄링했으므로 다음 사이클로 이동
       }
       if(found)
-        break; // Move to next scheduling cycle
+        break; // 프로세스를 스케줄링했으므로 루프 종료
     }
     
-    // Call aging function
+    // 에이징 함수 호출
     aging();
     
     release(&ptable.lock);
   }
 }
+
 
 
 
@@ -610,28 +618,30 @@ void move_to_lower_queue(struct proc *p) {
 void aging(void) {
   struct proc *p;
   
-  for(int level = 1; level < NQUEUE; level++) { // Start from level 1
-    for(int i = 0; i < queue_size[level]; i++) {
+  for(int level = 1; level < NQUEUE; level++) {
+    int i = 0;
+    while(i < queue_size[level]) {
       p = queue[level][i];
       if(p->state == RUNNABLE) {
-        if(p != mycpu()->proc) { // Exclude the currently running process
-          p->cpu_wait += 1; // Increment cpu_wait by 1 tick
-        }
+        p->cpu_wait++; // 현재 실행 중인 프로세스도 포함하여 증가
+        
         if(p->cpu_wait >= AGING_THRESHOLD) {
           // Move the process up one queue level
+          #ifdef DEBUG
+          cprintf("PID: %d Aging\n", p->pid);
+          #endif
+          
           remove_from_queue(level, p);
           p->q_level--;
-          p->cpu_wait = 0; // Reset cpu_wait
+          p->cpu_wait = 0;
           queue[p->q_level][queue_size[p->q_level]++] = p;
-          #ifdef DEBUG
-                 cprintf("PID: %d Aging\n", p->pid);
-          #endif
+          continue;
         }
       }
+      i++;
     }
   }
 }
-
 // 큐에서 삭제하는 함수
 void remove_from_queue(int level, struct proc *p) {
   int i;
