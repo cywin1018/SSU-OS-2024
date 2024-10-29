@@ -7,24 +7,16 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
-// trap.c 상단에 추가
-extern struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} ptable;
 
-extern void aging(void);  // aging 함수 선언
-extern struct proc* queue[NQUEUE][NPROC];  // 다단계 피드백 큐
-extern int queue_size[NQUEUE];             // 각 큐의 크기
-extern void remove_from_queue(int level, struct proc *p);
-extern void move_to_lower_queue(struct proc *p);
-extern int get_time_quantum(int level);
-#define AGING_THRESHOLD 250
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
+extern void print_all_queue(void); // 큐를 출력하는 함수
+extern int queue_size[NQUEUE];             // 각 큐의 크기
+extern struct proc* queue[NQUEUE][NPROC];  // 다단계 피드백 큐
+extern void remove_from_queue(int level, struct proc *p); // 큐에서부터 삭제하는 함수
 
 void
 tvinit(void)
@@ -44,6 +36,7 @@ idtinit(void)
   lidt(idt, sizeof(idt));
 }
 
+
 //PAGEBREAK: 41
 void
 trap(struct trapframe *tf)
@@ -57,12 +50,36 @@ trap(struct trapframe *tf)
       exit();
     return;
   }
-
+  struct proc *other;
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
+      for(int level = 0; level < NQUEUE; level++) {
+          for(int i = 0; i < queue_size[level]; i++) {
+              other = queue[level][i];
+              if(other!=0&&other->state==SLEEPING){
+                other->io_wait_time++; 
+              }else if(other!=0&&other->state==RUNNABLE){
+                other->cpu_wait++;
+                if (other->cpu_wait >= AGING_THRESHOLD) {
+                    if (other->q_level > 0) {
+
+                      // Move the process up one queue level
+                      remove_from_queue(level, other);
+                      other->q_level--; // low qeueue 
+                      other->cpu_wait = 0; // Reset cpu_wait
+                      queue[other->q_level][queue_size[other->q_level]++] = other;
+                      #ifdef DEBUG
+                        cprintf("PID: %d Aging\n", other->pid); // Aging 출력함
+                      #endif
+                    }
+                }
+              }
+              
+          }
+      }
       wakeup(&ticks);
       release(&tickslock);
     }
@@ -115,60 +132,50 @@ trap(struct trapframe *tf)
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
 // 타이머 인터럽트 처리
-if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
-    struct proc *p = myproc();
-    if(p->pid > 2 && p->end_time > 0) {
-        acquire(&ptable.lock);  // 락 획득
+if(myproc() && myproc()->state == RUNNING &&
+   tf->trapno == T_IRQ0+IRQ_TIMER) {
+  struct proc *p = myproc();
 
-        // 다른 프로세스들의 wait time 증가 및 에이징 처리
-        struct proc *other;
-        for(int level = 1; level < NQUEUE; level++) {
-            for(int i = 0; i < queue_size[level]; i++) {
-                other = queue[level][i];
-                if(other != p && other->state == RUNNABLE) {
-                    other->cpu_wait++;
-                    // 에이징 조건 체크 (250틱)
-                    if(other->cpu_wait >= 250) {
-                        #ifdef DEBUG
-                        cprintf("PID: %d Aging\n", other->pid);
-                        #endif
-                        remove_from_queue(level, other);
-                        other->q_level--;
-                        other->cpu_wait = 0;
-                        queue[other->q_level][queue_size[other->q_level]++] = other;
-                    }
-                }
-            }
-        }
 
-        // 현재 프로세스 처리
-        p->cpu_burst++;
-        p->remaining_time--;
-        int quantum = get_time_quantum(p->q_level);
+  if(p->pid > 2 && p->end_time > 0) {
+    p->cpu_burst++;
+    p->remaining_time--;
 
-        if(p->remaining_time <= 0) {
-            #ifdef DEBUG
-            cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-                    p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
-        
-            #endif
-            p->killed = 1;
-            release(&ptable.lock);
-        } else if(p->cpu_burst >= quantum) {
-            #ifdef DEBUG
-            cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-                    p->pid, p->cpu_burst, p->q_level, p->end_time - p->remaining_time, p->end_time);
-            #endif
-            if(p->q_level < NQUEUE - 1) {
-                move_to_lower_queue(p);
-            }
-            release(&ptable.lock);
-            yield();
-        } else {
-            release(&ptable.lock);
-        }
+    int quantum = get_time_quantum(p->q_level);
+
+    // // Reset cpu_wait since the process is running
+    //  p->cpu_wait = 0;
+    //  p->io_wait_time = 0;  // 실행 중인 프로세스의 io_wait_time 리셋
+    if(p->remaining_time <= 0) {
+      // 프로세스 종료 전에 정보 출력
+       
+       #ifdef DEBUG
+              int total_used = p->end_time - p->remaining_time;
+              cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+                      p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+       #endif
+
+      p->killed = 1;  // 프로세스 종료 설정
+      // print_all_queue();
+    } else if(p->cpu_burst >= quantum) {
+      // Time Quantum 만료 시 정보 출력
+       
+       #ifdef DEBUG
+              int total_used = p->end_time - p->remaining_time;
+              cprintf("PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+                      p->pid, p->cpu_burst, p->q_level, total_used, p->end_time);
+       #endif
+    
+      // p->cpu_burst = 0;  // CPU burst 초기화
+     
+      yield();
     }
+    // p->cpu_wait = 0;
+  }
+    
 }
+
+
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)
     exit();

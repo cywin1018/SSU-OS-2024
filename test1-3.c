@@ -2,72 +2,42 @@
 #include "stat.h"
 #include "user.h"
 
-int main(int argc, char *argv[]) {
-    printf(1, "start scheduler_test\n");
-    
-    int pid;
-    
-    // 첫 번째 프로세스 생성
-    pid = fork();
-    if(pid < 0) {
-        printf(1, "fork failed\n");
+int main(int argc, char *argv[])
+{
+  // 스케줄러 테스트 시작 메시지 출력
+  printf(1, "start scheduler_test\n");
+
+  #ifdef DEBUG
+  // 프로세스를 3개 생성하기 위한 루프
+  for(int i = 0; i < 3; i++) {
+    int pid = fork();  // 자식 프로세스를 생성
+    if(pid != 0) {     // 부모 프로세스에서 자식 PID 출력
+      printf(1, "PID: %d created\n", pid);
+    }
+    if(pid == 0) {     // 자식 프로세스의 경우
+      // 자식 프로세스의 스케줄러 관련 정보를 설정
+      if(set_proc_info(2, 0, 0, 0, 300) < 0) {  
+        printf(1, "set_proc_info failed\n");  // 설정 실패 시 오류 메시지 출력 후 종료
         exit();
-    }
-    if(pid == 0) {  // 첫 번째 자식 프로세스
-        printf(1, "PID: %d created\n", getpid());
-        sleep(50); // 다른 프로세스들이 생성될 때까지 대기
-        sleep(100); // 추가 대기 시간
-        
-        if(set_proc_info(2, 0, 0, 0, 300) < 0) {
-            printf(1, "set_proc_info failed\n");
-            exit();
-        }
-        printf(1, "Set process %d's info complete\n", getpid());
-        while(1);
-    }
+      }
+      printf(1, "Set process %d's info complete\n", getpid());  // 설정 완료 메시지 출력
 
-    // 두 번째 프로세스 생성
-    pid = fork();
-    if(pid < 0) {
-        printf(1, "fork failed\n");
-        exit();
+      // 자식 프로세스를 무한 루프 상태로 대기
+      while(1);
     }
-    if(pid == 0) {  // 두 번째 자식 프로세스
-        printf(1, "PID: %d created\n", getpid());
-        sleep(50);
-        sleep(50); // 중간 대기 시간
-        
-        if(set_proc_info(2, 0, 0, 0, 300) < 0) {
-            printf(1, "set_proc_info failed\n");
-            exit();
-        }
-        printf(1, "Set process %d's info complete\n", getpid());
-        while(1);
-    }
+  }
 
-    // 세 번째 프로세스 생성
-    pid = fork();
-    if(pid < 0) {
-        printf(1, "fork failed\n");
-        exit();
-    }
-    if(pid == 0) {  // 세 번째 자식 프로세스
-        printf(1, "PID: %d created\n", getpid());
-        sleep(50);
-        
-        if(set_proc_info(2, 0, 0, 0, 300) < 0) {
-            printf(1, "set_proc_info failed\n");
-            exit();
-        }
-        printf(1, "Set process %d's info complete\n", getpid());
-        while(1);
-    }
+  // 생성된 자식 프로세스 3개가 모두 종료될 때까지 부모 프로세스에서 대기
+  for(int i = 0; i < 3; i++) {
+    wait();
+  }
 
-    // 부모 프로세스는 모든 자식 프로세스가 종료될 때까지 대기
-    for(int i = 0; i < 3; i++) {
-        wait();
-    }
+  // 스케줄러 테스트 종료 메시지 출력
+  printf(1, "end of scheduler_test\n");
+  exit();
+  #endif
 
-    printf(1, "end of scheduler_test\n");
-    exit();
+  // DEBUG가 정의되지 않은 경우 바로 종료 메시지 출력
+  printf(1, "end of scheduler_test\n"); 
+  exit();
 }
